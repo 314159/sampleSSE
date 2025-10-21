@@ -1,0 +1,220 @@
+#include "http_session.hpp"
+#include <boost/beast/version.hpp>
+#include <boost/filesystem.hpp>
+#include <iostream>
+
+namespace fs = boost::filesystem;
+
+// Return a reasonable mime type based on the extension of a file.
+beast::string_view mime_type(beast::string_view path)
+{
+    using beast::iequals;
+    auto const ext = [&path] {
+        auto const pos = path.rfind(".");
+        if (pos == beast::string_view::npos)
+            return beast::string_view {};
+        return path.substr(pos);
+    }();
+    if (iequals(ext, ".htm"))
+        return "text/html";
+    if (iequals(ext, ".html"))
+        return "text/html";
+    if (iequals(ext, ".php"))
+        return "text/html";
+    if (iequals(ext, ".css"))
+        return "text/css";
+    if (iequals(ext, ".txt"))
+        return "text/plain";
+    if (iequals(ext, ".js"))
+        return "application/javascript";
+    if (iequals(ext, ".json"))
+        return "application/json";
+    if (iequals(ext, ".xml"))
+        return "application/xml";
+    if (iequals(ext, ".swf"))
+        return "application/x-shockwave-flash";
+    if (iequals(ext, ".flv"))
+        return "video/x-flv";
+    if (iequals(ext, ".png"))
+        return "image/png";
+    if (iequals(ext, ".jpe"))
+        return "image/jpeg";
+    if (iequals(ext, ".jpeg"))
+        return "image/jpeg";
+    if (iequals(ext, ".jpg"))
+        return "image/jpeg";
+    if (iequals(ext, ".gif"))
+        return "image/gif";
+    if (iequals(ext, ".svg"))
+        return "image/svg+xml";
+    if (iequals(ext, ".ico"))
+        return "image/vnd.microsoft.icon";
+    return "application/octet-stream";
+}
+
+HttpSession::HttpSession(
+    net::ip::tcp::socket&& socket,
+    std::string doc_root,
+    std::function<void(const std::string&)> logger)
+    : m_stream(std::move(socket))
+    , m_doc_root(std::move(doc_root))
+    , m_logger(std::move(logger))
+{
+}
+
+auto HttpSession::run() -> void
+{
+    // We need to be executing within a strand to perform async operations
+    // on the stream. We use a strand to ensure that handlers do not execute
+    // concurrently.
+    net::dispatch(m_stream.get_executor(),
+        beast::bind_front_handler(&HttpSession::do_read, shared_from_this()));
+}
+
+auto HttpSession::do_read() -> void
+{
+    // Make the request empty before reading,
+    // otherwise the operation behavior is undefined.
+    m_req = {};
+
+    // Set the timeout.
+    m_stream.expires_after(std::chrono::seconds(30));
+
+    // Read a request
+    http::async_read(m_stream, m_buffer, m_req,
+        beast::bind_front_handler(&HttpSession::on_read, shared_from_this()));
+}
+
+auto HttpSession::on_read(beast::error_code ec, std::size_t bytes_transferred) -> void
+{
+    boost::ignore_unused(bytes_transferred);
+
+    // This means they closed the connection
+    if (ec == http::error::end_of_stream)
+        return do_close();
+
+    if (ec) {
+        log("Read error: " + ec.message());
+        return;
+    }
+
+    // Log the request
+    log(std::string(m_req.method_string()) + " " + std::string(m_req.target()));
+
+    // Handle the request
+    handle_request();
+}
+
+auto HttpSession::handle_request() -> void
+{
+    // Returns a bad request response
+    auto const bad_request = [this](beast::string_view why) {
+        return create_error_response(http::status::bad_request, std::string(why));
+    };
+
+    // We only support GET and HEAD methods
+    if (m_req.method() != http::verb::get && m_req.method() != http::verb::head)
+        return send_response(bad_request("Unknown HTTP-method"));
+
+    // Request path must be absolute and not contain "..".
+    if (m_req.target().empty() || m_req.target()[0] != '/' || m_req.target().find("..") != beast::string_view::npos)
+        return send_response(bad_request("Illegal request-target"));
+
+    // Build the path to the requested file
+    auto path = fs::path { m_doc_root } / std::string(m_req.target().substr(1));
+    if (m_req.target().back() == '/')
+        path /= "index.html";
+
+    // Attempt to open the file
+    auto ec = beast::error_code {};
+    http::file_body::value_type body;
+    body.open(path.string().c_str(), beast::file_mode::scan, ec);
+
+    // Handle file not found
+    if (ec == beast::errc::no_such_file_or_directory)
+        return send_response(create_error_response(http::status::not_found, "The resource '" + std::string(m_req.target()) + "' was not found."));
+
+    // Handle other file errors
+    if (ec)
+        return send_response(create_error_response(http::status::internal_server_error, "An error occurred: '" + ec.message() + "'"));
+
+    // Cache the size since we need it after the move
+    auto const size = body.size();
+
+    // Respond to HEAD request
+    if (m_req.method() == http::verb::head) {
+        auto res = http::response<http::empty_body> { http::status::ok, m_req.version() };
+        res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+        res.set(http::field::content_type, mime_type(path.string()));
+        res.content_length(size);
+        res.keep_alive(m_req.keep_alive());
+        return send_response(std::move(res));
+    }
+
+    // Respond to GET request
+    auto res = http::response<http::file_body> {
+        std::piecewise_construct,
+        std::make_tuple(std::move(body)),
+        std::make_tuple(http::status::ok, m_req.version())
+    };
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, mime_type(path.string()));
+    res.content_length(size);
+    res.keep_alive(m_req.keep_alive());
+    return send_response(std::move(res));
+}
+
+auto HttpSession::send_response(http::message_generator&& msg) -> void
+{
+    auto const keep_alive = msg.keep_alive();
+
+    // Write the response
+    beast::async_write(
+        m_stream,
+        std::move(msg),
+        beast::bind_front_handler(&HttpSession::on_write, shared_from_this(), keep_alive));
+}
+
+auto HttpSession::on_write(bool keep_alive, beast::error_code ec, std::size_t bytes_transferred) -> void
+{
+    boost::ignore_unused(bytes_transferred);
+
+    if (ec)
+        return log("Write error: " + ec.message());
+
+    if (!keep_alive) {
+        // This means we should close the connection, usually because
+        // the response indicated the "Connection: close" semantic.
+        return do_close();
+    }
+
+    // Read another request
+    do_read();
+}
+
+auto HttpSession::do_close() -> void
+{
+    // Send a TCP shutdown
+    auto ec = beast::error_code {};
+    m_stream.socket().shutdown(net::ip::tcp::socket::shutdown_send, ec);
+
+    // At this point the connection is closed gracefully
+}
+
+auto HttpSession::log(const std::string& message) -> void
+{
+    if (m_logger) {
+        m_logger("[Session " + std::to_string(reinterpret_cast<uintptr_t>(this)) + "] " + message);
+    }
+}
+
+auto HttpSession::create_error_response(http::status status, const std::string& why) -> http::response<http::string_body>
+{
+    auto res = http::response<http::string_body> { status, m_req.version() };
+    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+    res.set(http::field::content_type, "text/html");
+    res.keep_alive(m_req.keep_alive());
+    res.body() = "<h1>Error</h1><p>" + why + "</p>";
+    res.prepare_payload();
+    return res;
+}
