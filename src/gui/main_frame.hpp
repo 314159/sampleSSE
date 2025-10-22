@@ -1,6 +1,7 @@
 #ifndef MAIN_FRAME_HPP
 #define MAIN_FRAME_HPP
 
+#include <gsl/gsl> // Include the Guideline Support Library
 #include <memory>
 #include <wx/event.h>
 #include <wx/wx.h>
@@ -34,14 +35,17 @@ private:
     // Helper to add a log message to the text control
     auto Log(const std::string& message) -> void;
 
+    // Helper to manage UI control states
+    auto UpdateUIForServerState(bool isRunning) -> void;
+
     // GUI Controls
-    wxTextCtrl* m_portText;
-    wxTextCtrl* m_docRootText;
-    wxButton* m_startButton;
-    wxButton* m_stopButton;
-    wxButton* m_quitButton;
-    wxTextCtrl* m_logText;
-    wxStaticText* m_statusLabel;
+    gsl::not_null<wxTextCtrl*> m_portText;
+    gsl::not_null<wxTextCtrl*> m_docRootText;
+    gsl::not_null<wxButton*> m_startButton;
+    gsl::not_null<wxButton*> m_stopButton;
+    gsl::not_null<wxButton*> m_quitButton;
+    gsl::not_null<wxTextCtrl*> m_logText;
+    gsl::not_null<wxStaticText*> m_statusLabel;
 
     // Server instance
     std::unique_ptr<WebServer> m_server;

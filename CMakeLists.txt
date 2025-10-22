@@ -44,6 +44,14 @@ CPMAddPackage(
         "wxUSE_GUI ON"
 )
 
+set(GSL_DOWNLOAD_VERSION 4.2.0)
+CPMAddPackage(
+    NAME GSL
+    GITHUB_REPOSITORY "Microsoft/GSL"
+    GIT_TAG v${GSL_DOWNLOAD_VERSION} # A recent stable version
+    OPTIONS "GSL_TEST=OFF" # Don't build tests
+)
+
 # --- Platform Specifics for Future ATEM SDK ---
 # This is a placeholder for your future integration.
 if(WIN32)
@@ -94,6 +102,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${PROJECT_SOURCE_DIR}/src"
     ${Boost_INCLUDE_DIRS}
     ${wxWidgets_INCLUDE_DIRS}
+    "${GSL_SOURCE_DIR}/include" # Correct way to get GSL includes with CPM
 )
 
 # --- Static Analysis and Formatting ---
