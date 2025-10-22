@@ -24,10 +24,16 @@ private:
     // Event Handlers
     auto OnStartServer(wxCommandEvent& event) -> void;
     auto OnStopServer(wxCommandEvent& event) -> void;
+    auto OnButtonA(wxCommandEvent& event) -> void; // New button A event handler
+    auto OnButtonB(wxCommandEvent& event) -> void; // New button B event handler
+    auto OnBrowse(wxCommandEvent& event) -> void; // Browse for document root
     auto OnLogMessage(wxCommandEvent& event) -> void;
     auto OnExit(wxCommandEvent& event) -> void;
     auto OnAbout(wxCommandEvent& event) -> void;
     auto OnClose(wxCloseEvent& event) -> void;
+    
+    // Helper to send SSE event
+    auto OnButton(std::string button_name) -> void;
 
     // Server Control Helper
     auto StopServer() -> void;
@@ -44,6 +50,9 @@ private:
     gsl::not_null<wxButton*> m_startButton;
     gsl::not_null<wxButton*> m_stopButton;
     gsl::not_null<wxButton*> m_quitButton;
+    gsl::not_null<wxButton*> m_buttonA; // New button A
+    gsl::not_null<wxButton*> m_browseButton;
+    gsl::not_null<wxButton*> m_buttonB; // New button B
     gsl::not_null<wxTextCtrl*> m_logText;
     gsl::not_null<wxStaticText*> m_statusLabel;
 

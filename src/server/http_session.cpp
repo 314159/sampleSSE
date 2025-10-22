@@ -1,6 +1,7 @@
 #include "http_session.hpp"
 #include <boost/beast/version.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/url/url_view.hpp> // For parsing URL paths
 #include <iostream>
 
 namespace fs = boost::filesystem;
@@ -55,11 +56,13 @@ beast::string_view mime_type(beast::string_view path)
 HttpSession::HttpSession(
     net::ip::tcp::socket&& socket,
     std::string doc_root,
-    std::function<void(const std::string&)> logger)
+    std::function<void(const std::string&)> logger,
+    std::shared_ptr<SseService> sse_service)
     : m_stream(std::move(socket))
     , m_doc_root(std::move(doc_root))
     , m_logger(std::move(logger))
 {
+    m_sse_service = std::move(sse_service);
 }
 
 auto HttpSession::run() -> void
@@ -115,6 +118,15 @@ auto HttpSession::handle_request() -> void
     // We only support GET and HEAD methods
     if (m_req.method() != http::verb::get && m_req.method() != http::verb::head)
         return send_response(bad_request("Unknown HTTP-method"));
+
+    // Check for SSE endpoint
+    if (m_req.target() == "/sse") {
+        if (m_sse_service) {
+            m_logger("Handing off connection to SSE service.");
+            m_sse_service->add_client(std::move(m_stream));
+        }
+        return; // Connection is now managed by SseService
+    }
 
     // Request path must be absolute and not contain "..".
     if (m_req.target().empty() || m_req.target()[0] != '/' || m_req.target().find("..") != beast::string_view::npos)

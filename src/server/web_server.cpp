@@ -20,6 +20,7 @@ WebServer::WebServer(
     m_logger = [](const std::string& msg) {
         std::cerr << msg << std::endl;
     };
+    m_sse_service = std::make_shared<SseService>(m_ioc, m_logger); // Initialize SSE service
 }
 
 WebServer::~WebServer()
@@ -41,7 +42,8 @@ auto WebServer::run() -> void
         m_ioc,
         tcp::endpoint { addr, m_port },
         m_doc_root,
-        m_logger);
+        m_logger,
+        m_sse_service); // Pass SSE service to listener
     m_listener->run();
 
     // Run the I/O service on the requested number of threads
@@ -73,6 +75,9 @@ auto WebServer::stop() -> void
 auto WebServer::set_logger(std::function<void(const std::string&)> logger) -> void
 {
     m_logger = std::move(logger);
+    if (m_sse_service) {
+        m_sse_service->set_logger(m_logger);
+    }
 }
 
 auto WebServer::log(const std::string& message) -> void
@@ -80,4 +85,9 @@ auto WebServer::log(const std::string& message) -> void
     if (m_logger) {
         m_logger(message);
     }
+}
+
+auto WebServer::get_sse_service() -> std::shared_ptr<SseService>
+{
+    return m_sse_service;
 }

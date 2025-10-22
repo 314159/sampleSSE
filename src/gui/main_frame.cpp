@@ -2,6 +2,7 @@
 #include "../server/web_server.hpp" // Include the server
 #include <gsl/gsl>
 #include <wx/config.h>
+#include <wx/filename.h>
 #include <wx/stdpaths.h>
 #include <wx/valnum.h> // For numeric validator
 
@@ -15,6 +16,9 @@ EVT_MENU(wxID_EXIT, MainFrame::OnExit)
 EVT_MENU(wxID_ABOUT, MainFrame::OnAbout)
 EVT_BUTTON(1001, MainFrame::OnStartServer)
 EVT_BUTTON(1002, MainFrame::OnStopServer)
+EVT_BUTTON(1003, MainFrame::OnButtonA) // Event for Button A
+EVT_BUTTON(1004, MainFrame::OnButtonB) // Event for Button B
+EVT_BUTTON(1005, MainFrame::OnBrowse)   // Event for Browse button
 EVT_BUTTON(wxID_EXIT, MainFrame::OnExit) // Connect the Quit button
 EVT_COMMAND(wxID_ANY, wxEVT_LOG_MESSAGE, MainFrame::OnLogMessage)
 EVT_CLOSE(MainFrame::OnClose)
@@ -38,10 +42,20 @@ MainFrame::MainFrame(const wxString& title)
         wxSize portSize(charWidth * 8, -1); // 6 digits + ~2 for padding
         return new wxTextCtrl { panel, wxID_ANY, portStr, wxDefaultPosition, portSize, 0, portValidator };
     }())
-    , m_docRootText(new wxTextCtrl(m_portText->GetParent(), wxID_ANY, std::make_unique<wxConfig>("WebServerGUI")->Read("/config/doc_root", ".")))
+    , m_docRootText([&] {
+        // Determine the absolute path to the 'www' directory relative to the executable
+        wxFileName exePath(wxStandardPaths::Get().GetExecutablePath());
+        exePath.RemoveLastDir(); // Move up from the executable's directory (e.g., build/)
+        exePath.AppendDir("www");
+        exePath.Normalize(wxPATH_NORM_ABSOLUTE | wxPATH_NORM_DOTS); // Resolve ".." and ensure it's a clean, absolute path
+        return new wxTextCtrl(m_portText->GetParent(), wxID_ANY, std::make_unique<wxConfig>("WebServerGUI")->Read("/config/doc_root", exePath.GetFullPath()));
+    }())
     , m_startButton(new wxButton { m_portText->GetParent(), 1001, "Start Server" })
     , m_stopButton(new wxButton { m_portText->GetParent(), 1002, "Stop Server" })
     , m_quitButton(new wxButton { m_portText->GetParent(), wxID_EXIT, "Quit" })
+    , m_buttonA(new wxButton { m_portText->GetParent(), 1003, "Button A" }) // Initialize Button A
+    , m_browseButton(new wxButton { m_portText->GetParent(), 1005, "Browse..." })
+    , m_buttonB(new wxButton { m_portText->GetParent(), 1004, "Button B" }) // Initialize Button B
     , m_logText(new wxTextCtrl(m_portText->GetParent(), wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2))
     , m_statusLabel(new wxStaticText(m_portText->GetParent(), wxID_ANY, "Status: Stopped"))
 {
@@ -63,8 +77,13 @@ MainFrame::MainFrame(const wxString& title)
 
     configSizer->Add(new wxStaticText(panel, wxID_ANY, "Port:"), 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT);
     configSizer->Add(m_portText, 0, wxALIGN_LEFT); // Use alignment instead of expand
+
+    // Create a sizer for the doc root text field and browse button
+    auto* docRootSizer = new wxBoxSizer(wxHORIZONTAL);
+    docRootSizer->Add(m_docRootText, 1, wxEXPAND | wxRIGHT, 5);
+    docRootSizer->Add(m_browseButton, 0, wxALIGN_CENTER_VERTICAL);
     configSizer->Add(new wxStaticText(panel, wxID_ANY, "Document Root:"), 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT);
-    configSizer->Add(m_docRootText, 1, wxEXPAND);
+    configSizer->Add(docRootSizer, 1, wxEXPAND);
     configSizer->AddGrowableCol(1, 1);
 
     // --- Control Buttons ---
@@ -72,6 +91,8 @@ MainFrame::MainFrame(const wxString& title)
     m_stopButton->Enable(false);
     buttonSizer->Add(m_startButton, 0, wxALL, 5);
     buttonSizer->Add(m_stopButton, 0, wxALL, 5);
+    buttonSizer->Add(m_buttonA, 0, wxALL, 5); // Add Button A
+    buttonSizer->Add(m_buttonB, 0, wxALL, 5); // Add Button B
     buttonSizer->Add(m_quitButton, 0, wxALL, 5);
 
     // --- Status and Logging (already created) ---
@@ -102,8 +123,16 @@ auto MainFrame::OnStartServer(wxCommandEvent& event) -> void
 
     unsigned long port;
     m_portText->GetValue().ToULong(&port);
-    auto doc_root = m_docRootText->GetValue().ToStdString();
+    wxString doc_root_str = m_docRootText->GetValue();
+    wxFileName doc_root_path(doc_root_str);
+    if (!doc_root_path.IsAbsolute()) {
+        // If the path is relative, make it absolute relative to the executable's directory.
+        doc_root_path.MakeAbsolute(wxStandardPaths::Get().GetExecutablePath());
+    }
+    auto doc_root = doc_root_path.GetFullPath().ToStdString();
     auto address = std::string { "0.0.0.0" };
+
+    Log("Starting server with document root: " + doc_root);
 
     try {
         m_server = std::make_unique<WebServer>(address, static_cast<unsigned short>(port), doc_root, 4);
@@ -176,6 +205,40 @@ auto MainFrame::OnAbout(wxCommandEvent& event) -> void
         "About Web Server", wxOK | wxICON_INFORMATION);
 }
 
+auto MainFrame::OnButton(std::string button_name) -> void
+{
+    if (m_server) {
+        if (m_server->get_sse_service()) {
+            Log("Button '" + button_name + "' pressed. Sending SSE event 'button_press' with data '" + button_name + "'.");
+            m_server->get_sse_service()->send_event_to_all("button_press", button_name);
+        } else {
+            Log("SSE service not available. Button " + button_name + "press not sent.");
+        }
+    } else {
+        Log("Server not running. Cannot send SSE event.");
+    }
+}
+
+auto MainFrame::OnButtonA(wxCommandEvent& event) -> void
+{
+    OnButton("A");
+}
+
+auto MainFrame::OnButtonB(wxCommandEvent& event) -> void
+{
+    OnButton("B");
+}
+
+auto MainFrame::OnBrowse(wxCommandEvent& event) -> void
+{
+    wxDirDialog dirDialog(this, "Choose a directory for the document root", m_docRootText->GetValue(), wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+
+    if (dirDialog.ShowModal() == wxID_OK) {
+        m_docRootText->SetValue(dirDialog.GetPath());
+        Log("Document root changed to: " + dirDialog.GetPath().ToStdString());
+    }
+}
+
 auto MainFrame::Log(const std::string& message) -> void
 {
     auto now = wxDateTime::Now();
@@ -189,4 +252,7 @@ auto MainFrame::UpdateUIForServerState(bool isRunning) -> void
     m_stopButton->Enable(isRunning);
     m_portText->Enable(!isRunning);
     m_docRootText->Enable(!isRunning);
+    m_browseButton->Enable(!isRunning);
+    m_buttonA->Enable(isRunning);
+    m_buttonB->Enable(isRunning);
 }

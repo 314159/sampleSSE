@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE Button Events</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #events { border: 1px solid #ccc; padding: 10px; min-height: 100px; background-color: #f9f9f9; }
+        .event-item { margin-bottom: 5px; padding: 5px; background-color: #e0e0e0; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Server-Sent Events (SSE) Demo</h1>
+    <p>This page listens for events from the C++ Web Server when buttons A or B are pressed in the GUI.</p>
+    <div id="events">
+        <p>Waiting for events...</p>
+    </div>
+
+    <script>
+        const eventLog = document.getElementById('events');
+        const eventSource = new EventSource('/sse'); // Connect to the SSE endpoint
+
+        eventSource.addEventListener('button_press', function(event) {
+            const p = document.createElement('p');
+            p.className = 'event-item';
+            p.textContent = `[${new Date().toLocaleTimeString()}] Button "${event.data}" was pressed!`;
+            eventLog.prepend(p); // Add new events at the top
+        });
+    </script>
+</body>
+</html>

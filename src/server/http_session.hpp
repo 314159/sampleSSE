@@ -1,6 +1,7 @@
 #ifndef HTTP_SESSION_HPP
 #define HTTP_SESSION_HPP
 
+#include "sse_service.hpp" // Include SSE service header
 #include <boost/asio/dispatch.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -19,7 +20,8 @@ public:
     HttpSession(
         net::ip::tcp::socket&& socket,
         std::string doc_root,
-        std::function<void(const std::string&)> logger);
+        std::function<void(const std::string&)> logger,
+        std::shared_ptr<SseService> sse_service); // Add SSE service
 
     // Start the session
     auto run() -> void;
@@ -41,6 +43,7 @@ private:
     std::string m_doc_root;
     http::request<http::string_body> m_req;
     std::function<void(const std::string&)> m_logger;
+    std::shared_ptr<SseService> m_sse_service; // SSE service instance
 };
 
 #endif // HTTP_SESSION_HPP

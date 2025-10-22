@@ -7,11 +7,13 @@ Listener::Listener(
     net::io_context& ioc,
     tcp::endpoint endpoint,
     std::string doc_root,
-    std::function<void(const std::string&)> logger)
+    std::function<void(const std::string&)> logger,
+    std::shared_ptr<SseService> sse_service)
     : m_ioc(ioc)
     , m_acceptor(ioc)
     , m_doc_root(std::move(doc_root))
     , m_logger(std::move(logger))
+    , m_sse_service(std::move(sse_service))
 {
     auto ec = beast::error_code {};
 
@@ -69,7 +71,8 @@ auto Listener::on_accept(beast::error_code ec, tcp::socket socket) -> void
         std::make_shared<HttpSession>(
             std::move(socket),
             m_doc_root,
-            m_logger)
+            m_logger,
+            m_sse_service) // Pass SSE service to HTTP session
             ->run();
     }
 

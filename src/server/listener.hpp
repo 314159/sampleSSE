@@ -1,6 +1,7 @@
 #ifndef LISTENER_HPP
 #define LISTENER_HPP
 
+#include "sse_service.hpp" // Include SSE service header
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core.hpp>
 #include <functional>
@@ -21,7 +22,8 @@ public:
         net::io_context& ioc,
         tcp::endpoint endpoint,
         std::string doc_root,
-        std::function<void(const std::string&)> logger);
+        std::function<void(const std::string&)> logger,
+        std::shared_ptr<SseService> sse_service); // Add SSE service
 
     // A listener is a unique resource, so it should not be copyable or movable.
     Listener(const Listener&) = delete;
@@ -40,6 +42,7 @@ private:
     tcp::acceptor m_acceptor;
     std::string m_doc_root;
     std::function<void(const std::string&)> m_logger;
+    std::shared_ptr<SseService> m_sse_service; // SSE service instance
 };
 
 #endif // LISTENER_HPP

@@ -7,6 +7,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "sse_service.hpp" // Include SSE service header
 
 // Forward declaration
 class Listener;
@@ -37,6 +38,9 @@ public:
     // Optional: Callback for logging messages to the GUI
     auto set_logger(std::function<void(const std::string&)> logger) -> void;
 
+    // Get the SSE service instance
+    auto get_sse_service() -> std::shared_ptr<SseService>;
+
 private:
     auto log(const std::string& message) -> void;
 
@@ -49,6 +53,7 @@ private:
     std::shared_ptr<Listener> m_listener;
     std::vector<std::thread> m_threads;
     std::function<void(const std::string&)> m_logger;
+    std::shared_ptr<SseService> m_sse_service; // SSE service instance
 };
 
 #endif // WEB_SERVER_HPP
