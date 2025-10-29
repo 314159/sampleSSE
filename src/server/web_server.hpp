@@ -1,13 +1,13 @@
 #ifndef WEB_SERVER_HPP
 #define WEB_SERVER_HPP
 
+#include "sse_service.hpp" // Include SSE service header
 #include <boost/asio/io_context.hpp>
 #include <functional>
 #include <memory>
 #include <string>
 #include <thread>
 #include <vector>
-#include "sse_service.hpp" // Include SSE service header
 
 // Forward declaration
 class Listener;

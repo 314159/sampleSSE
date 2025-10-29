@@ -47,11 +47,11 @@ auto MainFrame::CreateWidgetsAndLayout() -> void
     auto config = std::make_unique<wxConfig>("WebServerGUI");
     auto portStr = config->Read("/config/port", "8080");
     auto charWidth = panel->GetCharWidth();
-    auto portSize = wxSize{charWidth * 8, -1};
+    auto portSize = wxSize { charWidth * 8, -1 };
     m_portText = CreateWidget<wxTextCtrl>(panel, wxID_ANY, portStr, wxDefaultPosition, portSize, 0, portValidator);
 
     // Document Root Text Control
-    auto exePath = wxFileName{wxStandardPaths::Get().GetExecutablePath()};
+    auto exePath = wxFileName { wxStandardPaths::Get().GetExecutablePath() };
     exePath.RemoveLastDir();
     exePath.AppendDir("www");
     exePath.Normalize(wxPATH_NORM_ABSOLUTE | wxPATH_NORM_DOTS);
