@@ -31,7 +31,10 @@ private:
     auto OnExit(wxCommandEvent& event) -> void;
     auto OnAbout(wxCommandEvent& event) -> void;
     auto OnClose(wxCloseEvent& event) -> void;
-    
+
+    // Helper to send SSE event
+    auto CreateWidgetsAndLayout() -> void;
+
     // Helper to send SSE event
     auto OnButton(std::string button_name) -> void;
 
@@ -44,17 +47,25 @@ private:
     // Helper to manage UI control states
     auto UpdateUIForServerState(bool isRunning) -> void;
 
+    // Helper to create widgets and return the raw pointer for wxWidgets
+    template <typename T, typename... Args>
+    auto CreateWidget(Args&&... args) -> T*
+    {
+        T* widget = new T(std::forward<Args>(args)...);
+        return widget;
+    }
+
     // GUI Controls
-    gsl::not_null<wxTextCtrl*> m_portText;
-    gsl::not_null<wxTextCtrl*> m_docRootText;
-    gsl::not_null<wxButton*> m_startButton;
-    gsl::not_null<wxButton*> m_stopButton;
-    gsl::not_null<wxButton*> m_quitButton;
-    gsl::not_null<wxButton*> m_buttonA; // New button A
-    gsl::not_null<wxButton*> m_browseButton;
-    gsl::not_null<wxButton*> m_buttonB; // New button B
-    gsl::not_null<wxTextCtrl*> m_logText;
-    gsl::not_null<wxStaticText*> m_statusLabel;
+    wxTextCtrl* m_portText {};
+    wxTextCtrl* m_docRootText {};
+    wxButton* m_startButton {};
+    wxButton* m_stopButton {};
+    wxButton* m_quitButton {};
+    wxButton* m_buttonA {};
+    wxButton* m_browseButton {};
+    wxButton* m_buttonB {};
+    wxTextCtrl* m_logText {};
+    wxStaticText* m_statusLabel {};
 
     // Server instance
     std::unique_ptr<WebServer> m_server;

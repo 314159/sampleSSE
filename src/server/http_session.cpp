@@ -6,51 +6,72 @@
 
 namespace fs = boost::filesystem;
 
-// Return a reasonable mime type based on the extension of a file.
+constexpr char to_lower_ascii(char c)
+{
+    if (c >= 'A' && c <= 'Z') {
+        return c - ('A' - 'a');
+    }
+    return c;
+}
+
+constexpr bool iequals_ascii(std::string_view a, std::string_view b)
+{
+    if (a.length() != b.length()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.length(); ++i) {
+        if (to_lower_ascii(a[i]) != to_lower_ascii(b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// A map of file extensions to MIME types.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 20> mime_types {
+    { { ".css", "text/css" },
+        { ".flv", "video/x-flv" },
+        { ".gif", "image/gif" },
+        { ".gz", "application/gzip" },
+        { ".htm", "text/html" },
+        { ".html", "text/html" },
+        { ".ico", "image/vnd.microsoft.icon" },
+        { ".jpe", "image/jpeg" },
+        { ".jpeg", "image/jpeg" },
+        { ".jpg", "image/jpeg" },
+        { ".js", "application/javascript" },
+        { ".json", "application/json" },
+        { ".php", "text/html" },
+        { ".png", "image/png" },
+        { ".svg", "image/svg+xml" },
+        { ".swf", "application/x-shockwave-flash" },
+        { ".tar", "application/x-tar" },
+        { ".txt", "text/plain" },
+        { ".xml", "application/xml" },
+        { ".zip", "application/zip" } }
+};
+
+// Returns the MIME type for a given file extension.
+constexpr std::string_view mime_type_for(std::string_view extension)
+{
+    for (const auto& pair : mime_types) {
+        if (iequals_ascii(pair.first, extension)) {
+            return pair.second;
+        }
+    }
+    return "application/octet-stream";
+}
+
+// This function is kept to maintain the original interface.
 beast::string_view mime_type(beast::string_view path)
 {
-    using beast::iequals;
     auto const ext = [&path] {
         auto const pos = path.rfind(".");
         if (pos == beast::string_view::npos)
             return beast::string_view {};
         return path.substr(pos);
     }();
-    if (iequals(ext, ".htm"))
-        return "text/html";
-    if (iequals(ext, ".html"))
-        return "text/html";
-    if (iequals(ext, ".php"))
-        return "text/html";
-    if (iequals(ext, ".css"))
-        return "text/css";
-    if (iequals(ext, ".txt"))
-        return "text/plain";
-    if (iequals(ext, ".js"))
-        return "application/javascript";
-    if (iequals(ext, ".json"))
-        return "application/json";
-    if (iequals(ext, ".xml"))
-        return "application/xml";
-    if (iequals(ext, ".swf"))
-        return "application/x-shockwave-flash";
-    if (iequals(ext, ".flv"))
-        return "video/x-flv";
-    if (iequals(ext, ".png"))
-        return "image/png";
-    if (iequals(ext, ".jpe"))
-        return "image/jpeg";
-    if (iequals(ext, ".jpeg"))
-        return "image/jpeg";
-    if (iequals(ext, ".jpg"))
-        return "image/jpeg";
-    if (iequals(ext, ".gif"))
-        return "image/gif";
-    if (iequals(ext, ".svg"))
-        return "image/svg+xml";
-    if (iequals(ext, ".ico"))
-        return "image/vnd.microsoft.icon";
-    return "application/octet-stream";
+    return mime_type_for(std::string_view(ext.data(), ext.size()));
 }
 
 HttpSession::HttpSession(

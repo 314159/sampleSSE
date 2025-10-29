@@ -27,38 +27,78 @@ wxEND_EVENT_TABLE();
 
 MainFrame::MainFrame(const wxString& title)
     : wxFrame(NULL, wxID_ANY, title, wxDefaultPosition, wxSize(600, 450))
-    ,
-    // Initialize all gsl::not_null members in the initializer list.
-    // The panel must be created first, as other controls depend on it.
-    // We create a temporary panel pointer to make this possible.
-    m_portText([&] {
-        auto* panel = new wxPanel(this, wxID_ANY);
-        auto portValidator = wxIntegerValidator<unsigned short> {};
-        auto config = std::make_unique<wxConfig>("WebServerGUI");
-        wxString portStr = config->Read("/config/port", "8080");
-        portValidator.SetRange(1, 65535);
-        // Calculate a reliable initial size for 6 digits plus padding.
-        int charWidth = panel->GetCharWidth();
-        wxSize portSize(charWidth * 8, -1); // 6 digits + ~2 for padding
-        return new wxTextCtrl { panel, wxID_ANY, portStr, wxDefaultPosition, portSize, 0, portValidator };
-    }())
-    , m_docRootText([&] {
-        // Determine the absolute path to the 'www' directory relative to the executable
-        wxFileName exePath(wxStandardPaths::Get().GetExecutablePath());
-        exePath.RemoveLastDir(); // Move up from the executable's directory (e.g., build/)
-        exePath.AppendDir("www");
-        exePath.Normalize(wxPATH_NORM_ABSOLUTE | wxPATH_NORM_DOTS); // Resolve ".." and ensure it's a clean, absolute path
-        return new wxTextCtrl(m_portText->GetParent(), wxID_ANY, std::make_unique<wxConfig>("WebServerGUI")->Read("/config/doc_root", exePath.GetFullPath()));
-    }())
-    , m_startButton(new wxButton { m_portText->GetParent(), 1001, "Start Server" })
-    , m_stopButton(new wxButton { m_portText->GetParent(), 1002, "Stop Server" })
-    , m_quitButton(new wxButton { m_portText->GetParent(), wxID_EXIT, "Quit" })
-    , m_buttonA(new wxButton { m_portText->GetParent(), 1003, "Button A" }) // Initialize Button A
-    , m_browseButton(new wxButton { m_portText->GetParent(), 1005, "Browse..." })
-    , m_buttonB(new wxButton { m_portText->GetParent(), 1004, "Button B" }) // Initialize Button B
-    , m_logText(new wxTextCtrl(m_portText->GetParent(), wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2))
-    , m_statusLabel(new wxStaticText(m_portText->GetParent(), wxID_ANY, "Status: Stopped"))
 {
+    CreateWidgetsAndLayout();
+    CreateStatusBar();
+    SetStatusText("Ready");
+}
+
+auto MainFrame::CreateWidgetsAndLayout() -> void
+{
+    // --- Main Panel and Sizers ---
+    gsl::not_null<wxPanel*> panel = new wxPanel(this, wxID_ANY);
+    gsl::not_null<wxBoxSizer*> mainSizer = new wxBoxSizer(wxVERTICAL);
+    gsl::not_null<wxFlexGridSizer*> configSizer = new wxFlexGridSizer(2, 2, 5, 5);
+
+    // --- Create Widgets ---
+    // Port Text Control
+    auto portValidator = wxIntegerValidator<unsigned short> {};
+    portValidator.SetRange(1, 65535);
+    auto config = std::make_unique<wxConfig>("WebServerGUI");
+    auto portStr = config->Read("/config/port", "8080");
+    auto charWidth = panel->GetCharWidth();
+    auto portSize = wxSize{charWidth * 8, -1};
+    m_portText = CreateWidget<wxTextCtrl>(panel, wxID_ANY, portStr, wxDefaultPosition, portSize, 0, portValidator);
+
+    // Document Root Text Control
+    auto exePath = wxFileName{wxStandardPaths::Get().GetExecutablePath()};
+    exePath.RemoveLastDir();
+    exePath.AppendDir("www");
+    exePath.Normalize(wxPATH_NORM_ABSOLUTE | wxPATH_NORM_DOTS);
+    auto docRootStr = config->Read("/config/doc_root", exePath.GetFullPath());
+    m_docRootText = CreateWidget<wxTextCtrl>(panel, wxID_ANY, docRootStr);
+    m_browseButton = CreateWidget<wxButton>(panel, 1005, "Browse...");
+
+    // Control Buttons
+    m_startButton = CreateWidget<wxButton>(panel, 1001, "Start Server");
+    m_stopButton = CreateWidget<wxButton>(panel, 1002, "Stop Server");
+    m_buttonA = CreateWidget<wxButton>(panel, 1003, "Button A");
+    m_buttonB = CreateWidget<wxButton>(panel, 1004, "Button B");
+    m_quitButton = CreateWidget<wxButton>(panel, wxID_EXIT, "Quit");
+
+    // Status and Logging
+    m_statusLabel = CreateWidget<wxStaticText>(panel, wxID_ANY, "Status: Stopped");
+    m_logText = CreateWidget<wxTextCtrl>(panel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
+
+    // --- Configure Widgets ---
+    m_stopButton->Enable(false);
+
+    // --- Layout Widgets ---
+    // Config Section
+    configSizer->Add(new wxStaticText(panel, wxID_ANY, "Port:"), 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT);
+    configSizer->Add(m_portText, 0, wxALIGN_LEFT);
+    auto* docRootSizer = new wxBoxSizer(wxHORIZONTAL);
+    docRootSizer->Add(m_docRootText, 1, wxEXPAND | wxRIGHT, 5);
+    docRootSizer->Add(m_browseButton, 0, wxALIGN_CENTER_VERTICAL);
+    configSizer->Add(new wxStaticText(panel, wxID_ANY, "Document Root:"), 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT);
+    configSizer->Add(docRootSizer, 1, wxEXPAND);
+    configSizer->AddGrowableCol(1, 1);
+
+    // Button Section
+    auto* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    buttonSizer->Add(m_startButton, 0, wxALL, 5);
+    buttonSizer->Add(m_stopButton, 0, wxALL, 5);
+    buttonSizer->Add(m_buttonA, 0, wxALL, 5);
+    buttonSizer->Add(m_buttonB, 0, wxALL, 5);
+    buttonSizer->Add(m_quitButton, 0, wxALL, 5);
+
+    // Main Layout
+    mainSizer->Add(configSizer, 0, wxEXPAND | wxALL, 10);
+    mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxBOTTOM, 10);
+    mainSizer->Add(m_statusLabel, 0, wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    mainSizer->Add(new wxStaticText(panel, wxID_ANY, "Log:"), 0, wxLEFT | wxRIGHT, 10);
+    mainSizer->Add(m_logText, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+
     // --- Menu Bar ---
     auto* menuFile = new wxMenu;
     menuFile->Append(wxID_ABOUT);
@@ -68,46 +108,9 @@ MainFrame::MainFrame(const wxString& title)
     menuBar->Append(menuFile, "&File");
     SetMenuBar(menuBar);
 
-    // The panel was created during m_portText initialization. We can get it from any control.
-    gsl::not_null<wxWindow*> panel = m_portText->GetParent();
-
-    // --- Main Panel and Sizers ---
-    gsl::not_null<wxBoxSizer*> mainSizer = new wxBoxSizer(wxVERTICAL);
-    gsl::not_null<wxFlexGridSizer*> configSizer = new wxFlexGridSizer(2, 2, 5, 5);
-
-    configSizer->Add(new wxStaticText(panel, wxID_ANY, "Port:"), 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT);
-    configSizer->Add(m_portText, 0, wxALIGN_LEFT); // Use alignment instead of expand
-
-    // Create a sizer for the doc root text field and browse button
-    auto* docRootSizer = new wxBoxSizer(wxHORIZONTAL);
-    docRootSizer->Add(m_docRootText, 1, wxEXPAND | wxRIGHT, 5);
-    docRootSizer->Add(m_browseButton, 0, wxALIGN_CENTER_VERTICAL);
-    configSizer->Add(new wxStaticText(panel, wxID_ANY, "Document Root:"), 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT);
-    configSizer->Add(docRootSizer, 1, wxEXPAND);
-    configSizer->AddGrowableCol(1, 1);
-
-    // --- Control Buttons ---
-    auto* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
-    m_stopButton->Enable(false);
-    buttonSizer->Add(m_startButton, 0, wxALL, 5);
-    buttonSizer->Add(m_stopButton, 0, wxALL, 5);
-    buttonSizer->Add(m_buttonA, 0, wxALL, 5); // Add Button A
-    buttonSizer->Add(m_buttonB, 0, wxALL, 5); // Add Button B
-    buttonSizer->Add(m_quitButton, 0, wxALL, 5);
-
-    // --- Status and Logging (already created) ---
-
-    // --- Layout ---
-    mainSizer->Add(configSizer, 0, wxEXPAND | wxALL, 10);
-    mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxBOTTOM, 10);
-    mainSizer->Add(m_statusLabel, 0, wxLEFT | wxRIGHT | wxBOTTOM, 10);
-    mainSizer->Add(new wxStaticText(panel, wxID_ANY, "Log:"), 0, wxLEFT | wxRIGHT, 10);
-    mainSizer->Add(m_logText, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
-
+    // --- Finalize Layout ---
     panel->SetSizerAndFit(mainSizer);
-    SetMinSize(panel->GetSize()); // Set the minimum size of the frame to fit the controls
-    CreateStatusBar();
-    SetStatusText("Ready");
+    SetMinSize(panel->GetSize());
 }
 
 MainFrame::~MainFrame() = default;
@@ -156,10 +159,7 @@ auto MainFrame::OnStartServer(wxCommandEvent& event) -> void
     }
 }
 
-auto MainFrame::OnStopServer(wxCommandEvent& event) -> void
-{
-    StopServer();
-}
+auto MainFrame::OnStopServer(wxCommandEvent& event) -> void { StopServer(); }
 
 auto MainFrame::StopServer() -> void
 {
@@ -176,11 +176,7 @@ auto MainFrame::StopServer() -> void
     UpdateUIForServerState(false);
 }
 
-auto MainFrame::OnLogMessage(wxCommandEvent& event) -> void
-{
-    Log(event.GetString().ToStdString());
-}
-
+auto MainFrame::OnLogMessage(wxCommandEvent& event) -> void { Log(event.GetString().ToStdString()); }
 auto MainFrame::OnClose(wxCloseEvent& event) -> void
 {
     // Save configuration
@@ -194,11 +190,7 @@ auto MainFrame::OnClose(wxCloseEvent& event) -> void
     Destroy();
 }
 
-auto MainFrame::OnExit(wxCommandEvent& event) -> void
-{
-    Close(true);
-}
-
+auto MainFrame::OnExit(wxCommandEvent& event) -> void { Close(true); }
 auto MainFrame::OnAbout(wxCommandEvent& event) -> void
 {
     wxMessageBox("This is a C++20 Web Server using Boost.Beast and wxWidgets.",
@@ -219,16 +211,8 @@ auto MainFrame::OnButton(std::string button_name) -> void
     }
 }
 
-auto MainFrame::OnButtonA(wxCommandEvent& event) -> void
-{
-    OnButton("A");
-}
-
-auto MainFrame::OnButtonB(wxCommandEvent& event) -> void
-{
-    OnButton("B");
-}
-
+auto MainFrame::OnButtonA(wxCommandEvent& event) -> void { OnButton("A"); }
+auto MainFrame::OnButtonB(wxCommandEvent& event) -> void { OnButton("B"); }
 auto MainFrame::OnBrowse(wxCommandEvent& event) -> void
 {
     wxDirDialog dirDialog(this, "Choose a directory for the document root", m_docRootText->GetValue(), wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
