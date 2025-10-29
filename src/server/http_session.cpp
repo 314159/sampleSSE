@@ -229,8 +229,9 @@ auto HttpSession::do_close() -> void
 {
     // Send a TCP shutdown
     auto ec = beast::error_code {};
-    m_stream.socket().shutdown(net::ip::tcp::socket::shutdown_send, ec);
-
+    if (m_stream.socket().shutdown(net::ip::tcp::socket::shutdown_send, ec)) {
+        log("Shutdown error: " + ec.message());
+    }
     // At this point the connection is closed gracefully
 }
 

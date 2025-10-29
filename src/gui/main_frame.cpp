@@ -29,7 +29,7 @@ MainFrame::MainFrame(const wxString& title)
     : wxFrame(NULL, wxID_ANY, title, wxDefaultPosition, wxSize(600, 450))
 {
     CreateWidgetsAndLayout();
-    CreateStatusBar();
+    (void)CreateStatusBar(); // The returned pointer is managed by the frame.
     SetStatusText("Ready");
 }
 
@@ -104,7 +104,7 @@ auto MainFrame::CreateWidgetsAndLayout() -> void
     menuFile->Append(wxID_ABOUT);
     menuFile->AppendSeparator();
     menuFile->Append(wxID_EXIT);
-    auto* menuBar = new wxMenuBar;
+    auto* menuBar = new wxMenuBar; // wxWidgets manages the memory of the menu bar.
     menuBar->Append(menuFile, "&File");
     SetMenuBar(menuBar);
 
@@ -193,7 +193,7 @@ auto MainFrame::OnClose(wxCloseEvent& event) -> void
 auto MainFrame::OnExit(wxCommandEvent& event) -> void { Close(true); }
 auto MainFrame::OnAbout(wxCommandEvent& event) -> void
 {
-    wxMessageBox("This is a C++20 Web Server using Boost.Beast and wxWidgets.",
+    (void)wxMessageBox("This is a C++20 Web Server using Boost.Beast and wxWidgets.",
         "About Web Server", wxOK | wxICON_INFORMATION);
 }
 

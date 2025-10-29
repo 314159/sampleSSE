@@ -74,7 +74,9 @@ auto SseClient::on_write(beast::error_code ec, std::size_t bytes_transferred) ->
 auto SseClient::close() -> void
 {
     beast::error_code ec;
-    m_stream.socket().shutdown(tcp::socket::shutdown_send, ec);
+    if (m_stream.socket().shutdown(tcp::socket::shutdown_send, ec)) {
+        m_logger("SSE Client shutdown error: " + ec.message());
+    }
     // The client will be removed from SseService's list when its shared_ptr count drops to 0
 }
 
