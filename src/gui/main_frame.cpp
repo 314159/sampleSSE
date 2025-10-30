@@ -231,7 +231,7 @@ auto MainFrame::OnBrowse(wxCommandEvent& event) -> void
 auto MainFrame::Log(const std::string& message) -> void
 {
     auto now = wxDateTime::Now();
-    *m_logText << now.FormatISOTime() << ": " << message << "\n";
+    *m_logText << now.FormatISOCombined() << ": " << message << "\n";
 }
 
 auto MainFrame::UpdateUIForServerState(bool isRunning) -> void
