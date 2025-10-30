@@ -56,6 +56,8 @@ CPMAddPackage(
 # This is a placeholder for your future integration.
 if(WIN32)
     message(STATUS "Configuring for Windows")
+    # Windows Sockets API library is required for Boost.Asio
+    target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32)
     # Add COM libraries if needed, e.g., target_link_libraries(${PROJECT_NAME} PRIVATE ole32 oleaut32)
 elseif(APPLE)
     message(STATUS "Configuring for macOS")
