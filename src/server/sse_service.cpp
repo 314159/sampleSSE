@@ -13,7 +13,7 @@ SseClient::SseClient(beast::tcp_stream stream, std::function<void(const std::str
 auto SseClient::start() -> void
 {
     // Send initial SSE headers
-    http::response<http::empty_body> res;
+    auto res = http::response<http::empty_body> {};
     res.version(11); // HTTP/1.1
     res.result(http::status::ok);
     res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
@@ -23,15 +23,15 @@ auto SseClient::start() -> void
     res.keep_alive(true);
 
     // Use a message_generator for the header
-    http::message_generator msg = std::move(res);
+    auto msg = http::message_generator { std::move(res) };
 
     // Write the headers
     beast::async_write( // Use beast::async_write for message_generator
         m_stream,
         std::move(msg),
-        beast::bind_front_handler(
-            &SseClient::on_write,
-            shared_from_this()));
+        [self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
+            self->on_write(ec, bytes_transferred);
+        });
 }
 
 auto SseClient::send_event(const std::string& event_name, const std::string& data) -> void
@@ -49,20 +49,18 @@ auto SseClient::send_event(const std::string& event_name, const std::string& dat
 
     // Post the write operation to the stream's executor to ensure thread safety
     net::post(m_stream.get_executor(),
-        beast::bind_front_handler(
-            [self = shared_from_this()]() {
-                net::async_write( // Use net::async_write for raw buffers
-                    self->m_stream.socket(), // Use the underlying socket for asio::async_write
-                    net::buffer(self->m_write_buffer),
-                    beast::bind_front_handler(
-                        &SseClient::on_write,
-                        self));
-            }));
+        [self = shared_from_this()]() {
+            net::async_write(
+                self->m_stream.socket(),
+                net::buffer(self->m_write_buffer),
+                [self](const beast::error_code& ec, size_t bytes_transferred) {
+                    self->on_write(ec, bytes_transferred);
+                });
+        });
 }
 
-auto SseClient::on_write(beast::error_code ec, std::size_t bytes_transferred) -> void
+auto SseClient::on_write(beast::error_code ec, std::size_t /**/) -> void
 {
-    boost::ignore_unused(bytes_transferred);
     if (ec) {
         m_logger("SSE Client write error: " + ec.message());
         close(); // Close connection on error
@@ -73,7 +71,7 @@ auto SseClient::on_write(beast::error_code ec, std::size_t bytes_transferred) ->
 
 auto SseClient::close() -> void
 {
-    beast::error_code ec;
+    auto ec = beast::error_code {};
     if (m_stream.socket().shutdown(tcp::socket::shutdown_send, ec)) {
         m_logger("SSE Client shutdown error: " + ec.message());
     }
@@ -91,7 +89,7 @@ auto SseService::add_client(beast::tcp_stream stream) -> void
 {
     auto client = std::make_shared<SseClient>(std::move(stream), m_logger);
     {
-        std::lock_guard<std::mutex> lock(m_clients_mutex);
+        auto lock = std::lock_guard<std::mutex>(m_clients_mutex);
         m_clients.push_back(client);
     }
     client->start(); // Send initial headers
@@ -100,13 +98,11 @@ auto SseService::add_client(beast::tcp_stream stream) -> void
 
 auto SseService::send_event_to_all(const std::string& event_name, const std::string& data) -> void
 {
-    std::lock_guard<std::mutex> lock(m_clients_mutex);
+    auto lock = std::lock_guard<std::mutex>(m_clients_mutex);
     // Remove disconnected clients
-    m_clients.erase(std::remove_if(m_clients.begin(), m_clients.end(),
-                        [](const std::shared_ptr<SseClient>& client) {
-                            return !client->m_stream.socket().is_open();
-                        }),
-        m_clients.end());
+    std::erase_if(m_clients, [](const std::shared_ptr<SseClient>& client) {
+        return !client->m_stream.socket().is_open();
+    });
 
     if (m_clients.empty()) {
         m_logger("No SSE clients to send event '" + event_name + "' to.");

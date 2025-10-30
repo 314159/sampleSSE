@@ -82,8 +82,8 @@ HttpSession::HttpSession(
     : m_stream(std::move(socket))
     , m_doc_root(std::move(doc_root))
     , m_logger(std::move(logger))
+    , m_sse_service(std::move(sse_service))
 {
-    m_sse_service = std::move(sse_service);
 }
 
 auto HttpSession::run() -> void
@@ -92,7 +92,9 @@ auto HttpSession::run() -> void
     // on the stream. We use a strand to ensure that handlers do not execute
     // concurrently.
     net::dispatch(m_stream.get_executor(),
-        beast::bind_front_handler(&HttpSession::do_read, shared_from_this()));
+        [self = shared_from_this()]() {
+            self->do_read();
+        });
 }
 
 auto HttpSession::do_read() -> void
@@ -106,13 +108,13 @@ auto HttpSession::do_read() -> void
 
     // Read a request
     http::async_read(m_stream, m_buffer, m_req,
-        beast::bind_front_handler(&HttpSession::on_read, shared_from_this()));
+        [self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
+            self->on_read(ec, bytes_transferred);
+        });
 }
 
-auto HttpSession::on_read(beast::error_code ec, std::size_t bytes_transferred) -> void
+auto HttpSession::on_read(beast::error_code ec, std::size_t /**/) -> void
 {
-    boost::ignore_unused(bytes_transferred);
-
     // This means they closed the connection
     if (ec == http::error::end_of_stream)
         return do_close();
@@ -160,7 +162,7 @@ auto HttpSession::handle_request() -> void
 
     // Attempt to open the file
     auto ec = beast::error_code {};
-    http::file_body::value_type body;
+    auto body = http::file_body::value_type {};
     body.open(path.string().c_str(), beast::file_mode::scan, ec);
 
     // Handle file not found
@@ -205,13 +207,13 @@ auto HttpSession::send_response(http::message_generator&& msg) -> void
     beast::async_write(
         m_stream,
         std::move(msg),
-        beast::bind_front_handler(&HttpSession::on_write, shared_from_this(), keep_alive));
+        [self = shared_from_this(), keep_alive](const beast::error_code ec, std::size_t bytes_transferred) {
+            self->on_write(keep_alive, ec, bytes_transferred);
+        });
 }
 
-auto HttpSession::on_write(bool keep_alive, beast::error_code ec, std::size_t bytes_transferred) -> void
+auto HttpSession::on_write(bool keep_alive, beast::error_code ec, std::size_t /**/) -> void
 {
-    boost::ignore_unused(bytes_transferred);
-
     if (ec)
         return log("Write error: " + ec.message());
 

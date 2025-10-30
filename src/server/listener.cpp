@@ -56,9 +56,9 @@ auto Listener::do_accept() -> void
     // The new connection gets its own strand
     m_acceptor.async_accept(
         net::make_strand(m_ioc),
-        beast::bind_front_handler(
-            &Listener::on_accept,
-            shared_from_this()));
+        [self = shared_from_this()](beast::error_code ec, tcp::socket socket) {
+            self->on_accept(ec, std::move(socket));
+        });
 }
 
 auto Listener::on_accept(beast::error_code ec, tcp::socket socket) -> void

@@ -36,9 +36,9 @@ MainFrame::MainFrame(const wxString& title)
 auto MainFrame::CreateWidgetsAndLayout() -> void
 {
     // --- Main Panel and Sizers ---
-    gsl::not_null<wxPanel*> panel = new wxPanel(this, wxID_ANY);
-    gsl::not_null<wxBoxSizer*> mainSizer = new wxBoxSizer(wxVERTICAL);
-    gsl::not_null<wxFlexGridSizer*> configSizer = new wxFlexGridSizer(2, 2, 5, 5);
+    auto panel = gsl::not_null<wxPanel*> { new wxPanel { this, wxID_ANY } };
+    auto mainSizer = gsl::not_null<wxBoxSizer*> { new wxBoxSizer { wxVERTICAL } };
+    auto configSizer = gsl::not_null<wxFlexGridSizer*> { new wxFlexGridSizer { 2, 2, 5, 5 } };
 
     // --- Create Widgets ---
     // Port Text Control
@@ -48,7 +48,7 @@ auto MainFrame::CreateWidgetsAndLayout() -> void
     auto portStr = config->Read("/config/port", "8080");
     auto charWidth = panel->GetCharWidth();
     auto portSize = wxSize { charWidth * 8, -1 };
-    m_portText = CreateWidget<wxTextCtrl>(panel, wxID_ANY, portStr, wxDefaultPosition, portSize, 0, portValidator);
+    m_portText = gsl::not_null<wxTextCtrl*> { CreateWidget<wxTextCtrl>(panel, wxID_ANY, portStr, wxDefaultPosition, portSize, 0, portValidator) };
 
     // Document Root Text Control
     // Get the directory containing the executable in a platform-independent way.
@@ -82,7 +82,7 @@ auto MainFrame::CreateWidgetsAndLayout() -> void
     // Config Section
     configSizer->Add(new wxStaticText(panel, wxID_ANY, "Port:"), 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT);
     configSizer->Add(m_portText, 0, wxALIGN_LEFT);
-    auto* docRootSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto docRootSizer = gsl::not_null<wxBoxSizer*> { new wxBoxSizer { wxHORIZONTAL } };
     docRootSizer->Add(m_docRootText, 1, wxEXPAND | wxRIGHT, 5);
     docRootSizer->Add(m_browseButton, 0, wxALIGN_CENTER_VERTICAL);
     configSizer->Add(new wxStaticText(panel, wxID_ANY, "Document Root:"), 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT);
@@ -90,7 +90,7 @@ auto MainFrame::CreateWidgetsAndLayout() -> void
     configSizer->AddGrowableCol(1, 1);
 
     // Button Section
-    auto* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto buttonSizer = gsl::not_null<wxBoxSizer*>{new wxBoxSizer{wxHORIZONTAL}};
     buttonSizer->Add(m_startButton, 0, wxALL, 5);
     buttonSizer->Add(m_stopButton, 0, wxALL, 5);
     buttonSizer->Add(m_buttonA, 0, wxALL, 5);
@@ -105,11 +105,11 @@ auto MainFrame::CreateWidgetsAndLayout() -> void
     mainSizer->Add(m_logText, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
     // --- Menu Bar ---
-    auto* menuFile = new wxMenu;
+    auto menuFile = gsl::not_null<wxMenu*>{new wxMenu};
     menuFile->Append(wxID_ABOUT);
     menuFile->AppendSeparator();
     menuFile->Append(wxID_EXIT);
-    auto* menuBar = new wxMenuBar; // wxWidgets manages the memory of the menu bar.
+    auto menuBar = gsl::not_null<wxMenuBar*>(new wxMenuBar); // wxWidgets manages the memory of the menu bar.
     menuBar->Append(menuFile, "&File");
     SetMenuBar(menuBar);
 
@@ -129,10 +129,10 @@ auto MainFrame::OnStartServer(wxCommandEvent& event) -> void
         return;
     }
 
-    unsigned long port;
+    auto port = 0ul;
     m_portText->GetValue().ToULong(&port);
-    wxString doc_root_str = m_docRootText->GetValue();
-    wxFileName doc_root_path(doc_root_str);
+    auto doc_root_str = m_docRootText->GetValue();
+    auto doc_root_path = wxFileName { doc_root_str };
     if (!doc_root_path.IsAbsolute()) {
         // If the path is relative, make it absolute relative to the executable's directory.
         doc_root_path.MakeAbsolute(wxStandardPaths::Get().GetExecutablePath());
@@ -149,7 +149,7 @@ auto MainFrame::OnStartServer(wxCommandEvent& event) -> void
         m_server->set_logger([this](const std::string& msg) {
             // Use gsl::owner to explicitly transfer ownership of the event
             // to the wxWidgets event queue.
-            auto* logEvent = new wxCommandEvent(wxEVT_LOG_MESSAGE, GetId());
+            auto logEvent = gsl::not_null<wxCommandEvent*>(new wxCommandEvent(wxEVT_LOG_MESSAGE, GetId()));
             logEvent->SetString(wxString(msg));
             wxQueueEvent(this, gsl::owner<wxCommandEvent*>(logEvent));
         });
@@ -220,7 +220,7 @@ auto MainFrame::OnButtonA(wxCommandEvent& event) -> void { OnButton("A"); }
 auto MainFrame::OnButtonB(wxCommandEvent& event) -> void { OnButton("B"); }
 auto MainFrame::OnBrowse(wxCommandEvent& event) -> void
 {
-    wxDirDialog dirDialog(this, "Choose a directory for the document root", m_docRootText->GetValue(), wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+    auto dirDialog = wxDirDialog(this, "Choose a directory for the document root", m_docRootText->GetValue(), wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
 
     if (dirDialog.ShowModal() == wxID_OK) {
         m_docRootText->SetValue(dirDialog.GetPath());

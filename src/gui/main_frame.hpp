@@ -21,31 +21,20 @@ public:
     MainFrame& operator=(MainFrame&&) = delete;
 
 private:
-    // Event Handlers
-    auto OnStartServer(wxCommandEvent& event) -> void;
-    auto OnStopServer(wxCommandEvent& event) -> void;
+    auto CreateWidgetsAndLayout() -> void;
+    auto Log(const std::string& message) -> void; // Helper to add a log message to the text control
+    auto OnAbout(wxCommandEvent& event) -> void;
+    auto OnBrowse(wxCommandEvent& event) -> void; // Browse for document root
+    auto OnButton(std::string button_name) -> void;
     auto OnButtonA(wxCommandEvent& event) -> void; // New button A event handler
     auto OnButtonB(wxCommandEvent& event) -> void; // New button B event handler
-    auto OnBrowse(wxCommandEvent& event) -> void; // Browse for document root
-    auto OnLogMessage(wxCommandEvent& event) -> void;
-    auto OnExit(wxCommandEvent& event) -> void;
-    auto OnAbout(wxCommandEvent& event) -> void;
     auto OnClose(wxCloseEvent& event) -> void;
-
-    // Helper to send SSE event
-    auto CreateWidgetsAndLayout() -> void;
-
-    // Helper to send SSE event
-    auto OnButton(std::string button_name) -> void;
-
-    // Server Control Helper
+    auto OnExit(wxCommandEvent& event) -> void;
+    auto OnLogMessage(wxCommandEvent& event) -> void;
+    auto OnStartServer(wxCommandEvent& event) -> void;
+    auto OnStopServer(wxCommandEvent& event) -> void;
     auto StopServer() -> void;
-
-    // Helper to add a log message to the text control
-    auto Log(const std::string& message) -> void;
-
-    // Helper to manage UI control states
-    auto UpdateUIForServerState(bool isRunning) -> void;
+    auto UpdateUIForServerState(bool isRunning) -> void; // Helper to manage UI control states
 
     // Helper to create widgets and return the raw pointer for wxWidgets
     template <typename T, typename... Args>
