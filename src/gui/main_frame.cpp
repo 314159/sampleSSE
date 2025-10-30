@@ -51,12 +51,17 @@ auto MainFrame::CreateWidgetsAndLayout() -> void
     m_portText = CreateWidget<wxTextCtrl>(panel, wxID_ANY, portStr, wxDefaultPosition, portSize, 0, portValidator);
 
     // Document Root Text Control
-    auto exePath = wxFileName { wxStandardPaths::Get().GetExecutablePath() };
-    exePath.RemoveLastDir();
-    exePath.AppendDir("www");
-    exePath.Normalize(wxPATH_NORM_ABSOLUTE | wxPATH_NORM_DOTS);
-    auto docRootStr = config->Read("/config/doc_root", exePath.GetFullPath());
-    m_docRootText = CreateWidget<wxTextCtrl>(panel, wxID_ANY, docRootStr);
+    // Get the directory containing the executable in a platform-independent way.
+    auto defaultDocRootPath = wxFileName::DirName(wxStandardPaths::Get().GetExecutablePath());
+    if (!defaultDocRootPath.AppendDir("www")) {
+        throw std::runtime_error("Failed to append 'www' to default document root path.");
+    }
+    auto docRootPath = wxFileName(config->Read("/config/doc_root", defaultDocRootPath.GetFullPath()));
+    if (!docRootPath.Normalize(
+            wxPATH_NORM_ABSOLUTE | wxPATH_NORM_ENV_VARS | wxPATH_NORM_DOTS | wxPATH_NORM_TILDE | wxPATH_NORM_CASE)) {
+        throw std::runtime_error("Failed to normalize document root path.");
+    }
+    m_docRootText = CreateWidget<wxTextCtrl>(panel, wxID_ANY, docRootPath.GetFullPath());
     m_browseButton = CreateWidget<wxButton>(panel, 1005, "Browse...");
 
     // Control Buttons
