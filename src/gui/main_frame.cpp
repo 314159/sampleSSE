@@ -137,8 +137,8 @@ auto MainFrame::OnStartServer(wxCommandEvent& event) -> void
         // If the path is relative, make it absolute relative to the executable's directory.
         doc_root_path.MakeAbsolute(wxStandardPaths::Get().GetExecutablePath());
     }
-    auto doc_root = doc_root_path.GetFullPath().ToStdString();
-    auto address = std::string { "0.0.0.0" };
+    const auto doc_root = doc_root_path.GetFullPath().ToStdString();
+    const auto address = std::string { "::" };
 
     Log("Starting server with document root: " + doc_root);
 
