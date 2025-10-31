@@ -1,6 +1,7 @@
 #ifndef SSE_SERVICE_HPP
 #define SSE_SERVICE_HPP
 
+#include <atomic>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -29,15 +30,22 @@ public:
     // Send an event to this client
     auto send_event(const std::string& event_name, const std::string& data) -> void;
 
+    // Check if the client connection is closed
+    auto is_closed() const -> bool;
+
     // Public for SseService to check socket status
     beast::tcp_stream m_stream;
 
 private:
+    auto on_sse_startup(beast::error_code ec, std::size_t bytes_transferred) -> void;
     auto on_write(beast::error_code ec, std::size_t bytes_transferred) -> void;
+    auto do_read() -> void;
+    auto on_read(beast::error_code ec, std::size_t bytes_transferred) -> void;
     auto close() -> void;
 
     std::function<void(const std::string&)> m_logger;
     std::string m_write_buffer; // Buffer for outgoing SSE data
+    std::atomic<bool> m_is_closed { false };
 };
 
 // Manages all SSE client connections
@@ -49,6 +57,7 @@ public:
     auto set_logger(std::function<void(const std::string&)> logger) -> void;
 
 private:
+    auto prune_clients() -> void; // Must be called under lock
     net::io_context& m_ioc;
     std::function<void(const std::string&)> m_logger;
     std::vector<std::shared_ptr<SseClient>> m_clients;

@@ -30,12 +30,27 @@ auto SseClient::start() -> void
         m_stream,
         std::move(msg),
         [self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
-            self->on_write(ec, bytes_transferred);
+            self->on_sse_startup(ec, bytes_transferred);
         });
+}
+
+auto SseClient::on_sse_startup(beast::error_code ec, std::size_t /*bytes_transferred*/) -> void
+{
+    if (ec) {
+        m_logger("SSE Client header write error: " + ec.message());
+        close();
+        return;
+    }
+
+    do_read(); // Start listening for disconnect
 }
 
 auto SseClient::send_event(const std::string& event_name, const std::string& data) -> void
 {
+    // Don't send if the client is already closed
+    if (m_is_closed.load()) {
+        return;
+    }
     // SSE format: "event: <event_name>\ndata: <data>\n\n"
     m_write_buffer.clear();
     if (!event_name.empty()) {
@@ -69,13 +84,55 @@ auto SseClient::on_write(beast::error_code ec, std::size_t /**/) -> void
     // and wait for more events to send.
 }
 
+auto SseClient::do_read() -> void
+{
+    // Post a read operation. We don't expect to receive any data on an SSE
+    // connection from the client. The primary purpose of this read is to
+    // detect when the client closes the connection. We use a static buffer
+    // as we will discard any data received.
+    static char dummy_buffer[1];
+    m_stream.socket().async_read_some(
+        net::buffer(dummy_buffer),
+        [self = shared_from_this()](beast::error_code ec, std::size_t bytes_transferred) {
+            self->on_read(ec, bytes_transferred);
+        });
+}
+
+auto SseClient::on_read(beast::error_code ec, std::size_t /*bytes_transferred*/) -> void
+{
+    // The read operation will fail if the client disconnects.
+    // This is the primary mechanism for detecting a closed connection.
+    if (ec == net::error::eof) {
+        // This is a graceful shutdown by the client.
+        m_logger("SSE Client disconnected gracefully.");
+    } else if (ec) {
+        // This is some other error.
+        m_logger("SSE Client read error, disconnecting: " + ec.message());
+    } else {
+        // We received data, which is not expected for an SSE connection from the client.
+        m_logger("SSE Client sent unexpected data. Disconnecting.");
+    }
+    close();
+}
+
+auto SseClient::is_closed() const -> bool
+{
+    return m_is_closed.load();
+}
+
 auto SseClient::close() -> void
 {
-    auto ec = beast::error_code {};
-    if (m_stream.socket().shutdown(tcp::socket::shutdown_send, ec)) {
-        m_logger("SSE Client shutdown error: " + ec.message());
+    if (m_is_closed.exchange(true)) {
+        return; // Already closed
     }
-    // The client will be removed from SseService's list when its shared_ptr count drops to 0
+    auto ec = beast::error_code {};
+    // The socket is closed gracefully by the stream destructor.
+    // We can be more explicit here if needed.
+    if (m_stream.socket().close(ec)) {
+        m_logger("SSE Client socket close error: " + ec.message());
+    } else {
+        m_logger("SSE Client socket closed.");
+    }
 }
 
 // SseService implementation
@@ -90,19 +147,19 @@ auto SseService::add_client(beast::tcp_stream stream) -> void
     auto client = std::make_shared<SseClient>(std::move(stream), m_logger);
     {
         auto lock = std::lock_guard<std::mutex>(m_clients_mutex);
+        // Prune any disconnected clients before adding the new one
+        prune_clients();
         m_clients.push_back(client);
+        m_logger("SSE client connected. Total clients: " + std::to_string(m_clients.size()));
     }
     client->start(); // Send initial headers
-    m_logger("SSE client connected. Total clients: " + std::to_string(m_clients.size()));
 }
 
 auto SseService::send_event_to_all(const std::string& event_name, const std::string& data) -> void
 {
     auto lock = std::lock_guard<std::mutex>(m_clients_mutex);
     // Remove disconnected clients
-    std::erase_if(m_clients, [](const std::shared_ptr<SseClient>& client) {
-        return !client->m_stream.socket().is_open();
-    });
+    prune_clients();
 
     if (m_clients.empty()) {
         m_logger("No SSE clients to send event '" + event_name + "' to.");
@@ -118,4 +175,14 @@ auto SseService::send_event_to_all(const std::string& event_name, const std::str
 auto SseService::set_logger(std::function<void(const std::string&)> logger) -> void
 {
     m_logger = std::move(logger);
+}
+
+auto SseService::prune_clients() -> void
+{
+    // This method must be called while holding a lock on m_clients_mutex.
+    auto initial_size = m_clients.size();
+    std::erase_if(m_clients, [](const std::shared_ptr<SseClient>& c) { return c->is_closed(); });
+    if (m_clients.size() < initial_size) {
+        m_logger("Pruned " + std::to_string(initial_size - m_clients.size()) + " disconnected SSE clients.");
+    }
 }
